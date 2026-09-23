@@ -76,7 +76,10 @@ exports.handler = async (event) => {
       ],
     });
 
-    const raw = msg.content[0].text.trim();
+    let raw = msg.content[0].text.trim();
+    // Claude sometimes wraps JSON in markdown code fences (```json ... ```)
+    // even when told not to — strip those before parsing.
+    raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     structured = JSON.parse(raw);
   } catch (err) {
     console.error('Extraction failed:', err);

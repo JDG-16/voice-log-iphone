@@ -1,2 +1,5 @@
 node_modules
 log-this-6d827-firebase-adminsdk-fbsvc-8f8db03e71.json
+
+# Local Netlify folder
+.netlify
