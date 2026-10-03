@@ -1,14 +1,15 @@
 // netlify/functions/log-entry.js
 //
 // Receives a raw voice transcript from the iOS Shortcut, asks Claude to
-// extract structured fields, and writes both the raw + structured record
-// to Firestore.
+// classify it into one of five categories (todo, grocery, finance, house,
+// restaurant) and extract the right fields for that category, then writes
+// both the raw + structured record to Firestore.
 //
-// Env vars needed (set in Netlify: Site settings -> Environment variables):
-//   ANTHROPIC_API_KEY      - your Claude API key
+// Env vars needed (set in Netlify: Site configuration -> Environment variables):
+//   ANTHROPIC_API_KEY        - your Claude API key
 //   FIREBASE_SERVICE_ACCOUNT - the full JSON of a Firebase service account
-//                               key, stringified (see setup notes below)
-//   SHORTCUT_SHARED_SECRET  - any random string; the Shortcut sends this
+//                               key, stringified (see SETUP.md)
+//   SHORTCUT_SHARED_SECRET   - any random string; the Shortcut sends this
 //                               as a header so randoms on the internet
 //                               can't write to your Firestore
 
@@ -26,21 +27,51 @@ const db = admin.firestore();
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const EXTRACTION_PROMPT = `You extract structured data from a short spoken log entry.
-The person speaks casually and may cover restaurants, activities, workouts,
-book/media notes, or general thoughts. Return ONLY valid JSON, no markdown
-fences, no commentary, matching this shape:
+const EXTRACTION_PROMPT = `You extract structured data from a short spoken log entry and file it into
+exactly one category: "todo", "grocery", "finance", "house", or "restaurant".
+
+Category guide:
+- "todo": general tasks, reminders, errands that don't fit the categories below
+- "grocery": items to buy at a grocery store or shop
+- "finance": bills, payments, money-related tasks or reminders
+- "house": home maintenance, repairs, house-related projects or chores
+- "restaurant": mentions of a restaurant or place to eat — either already
+  visited, or somewhere the person wants to try
+
+If you are unsure which category fits, use "todo".
+
+Return ONLY valid JSON (no markdown code fences, no commentary) matching this
+exact shape:
 
 {
-  "category": "restaurant" | "activity" | "workout" | "media" | "note" | "other",
-  "title": string,            // short name of the subject (e.g. venue, book title, activity)
-  "rating": number | null,    // out of 10 if one was mentioned, else null
-  "sentiment": "positive" | "negative" | "mixed" | "neutral",
-  "tags": string[],           // short descriptive tags, lowercase, e.g. ["loud","pasta","date night"]
-  "summary": string           // one clean sentence summarizing the entry
+  "type": "todo" | "grocery" | "finance" | "house" | "restaurant",
+  "title": string,
+  "done": boolean,                 // todo/grocery/finance/house only — false unless clearly already done; false for restaurant
+  "dueDate": string | null,        // ISO date (YYYY-MM-DD) if a deadline was mentioned, else null — todo/grocery/finance/house only
+  "notes": string | null,          // any extra detail worth keeping, for any type
+  "status": "went" | "want_to_go" | null,   // restaurant only, else null
+  "neighborhood": string | null,   // restaurant only, if a neighborhood/area was mentioned, else null
+  "rating": number | null,         // restaurant only, out of 10 if a rating was mentioned, else null
+  "sentiment": "positive" | "negative" | "mixed" | "neutral" | null,  // restaurant only, else null
+  "tags": string[]                 // short descriptive lowercase tags, any type, [] if none
 }
 
 Transcript: `;
+
+function fallbackStructured(transcript) {
+  return {
+    type: 'todo',
+    title: transcript.slice(0, 80),
+    done: false,
+    dueDate: null,
+    notes: transcript,
+    status: null,
+    neighborhood: null,
+    rating: null,
+    sentiment: null,
+    tags: [],
+  };
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -65,7 +96,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Missing "transcript" field' };
   }
 
-  // Ask Claude to structure the transcript
+  // Ask Claude to classify + structure the transcript
   let structured;
   try {
     const msg = await anthropic.messages.create({
@@ -80,18 +111,25 @@ exports.handler = async (event) => {
     // Claude sometimes wraps JSON in markdown code fences (```json ... ```)
     // even when told not to — strip those before parsing.
     raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-    structured = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+
+    // Normalize so every doc has a consistent shape regardless of type
+    structured = {
+      type: parsed.type || 'todo',
+      title: parsed.title || transcript.slice(0, 80),
+      done: !!parsed.done,
+      dueDate: parsed.dueDate || null,
+      notes: parsed.notes || null,
+      status: parsed.status || null,
+      neighborhood: parsed.neighborhood || null,
+      rating: typeof parsed.rating === 'number' ? parsed.rating : null,
+      sentiment: parsed.sentiment || null,
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+    };
   } catch (err) {
     console.error('Extraction failed:', err);
-    // Fall back to an unstructured entry rather than losing the log
-    structured = {
-      category: 'other',
-      title: null,
-      rating: null,
-      sentiment: 'neutral',
-      tags: [],
-      summary: transcript,
-    };
+    // Fall back to a plain to-do entry rather than losing the log
+    structured = fallbackStructured(transcript);
   }
 
   // Write to Firestore
