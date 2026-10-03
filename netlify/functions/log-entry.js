@@ -107,7 +107,15 @@ exports.handler = async (event) => {
       ],
     });
 
-    let raw = msg.content[0].text.trim();
+    // Find the first text block rather than assuming content[0] is it —
+    // the response can include other block types (e.g. thinking) first.
+    const textBlock = (msg.content || []).find(b => b.type === 'text');
+    if (!textBlock || !textBlock.text) {
+      console.error('No text block in Claude response. stop_reason:', msg.stop_reason, 'full response:', JSON.stringify(msg));
+      throw new Error('Empty or missing text block in Claude response');
+    }
+
+    let raw = textBlock.text.trim();
     // Claude sometimes wraps JSON in markdown code fences (```json ... ```)
     // even when told not to — strip those before parsing.
     raw = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
