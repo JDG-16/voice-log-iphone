@@ -220,6 +220,11 @@
       </div>
       <button type="submit" class="submit">Add</button>
     </form>
+    <div class="filter-row" data-status-filter="todo">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="active">Active</button>
+      <button data-filter="done">Done</button>
+    </div>
     <ul class="item-list" data-list="todo"></ul>
   </section>
 
@@ -231,6 +236,11 @@
       </div>
       <button type="submit" class="submit">Add</button>
     </form>
+    <div class="filter-row" data-status-filter="grocery">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="active">Active</button>
+      <button data-filter="done">Done</button>
+    </div>
     <ul class="item-list" data-list="grocery"></ul>
   </section>
 
@@ -243,6 +253,11 @@
       </div>
       <button type="submit" class="submit">Add</button>
     </form>
+    <div class="filter-row" data-status-filter="finance">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="active">Active</button>
+      <button data-filter="done">Done</button>
+    </div>
     <ul class="item-list" data-list="finance"></ul>
   </section>
 
@@ -255,6 +270,11 @@
       </div>
       <button type="submit" class="submit">Add</button>
     </form>
+    <div class="filter-row" data-status-filter="house">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="active">Active</button>
+      <button data-filter="done">Done</button>
+    </div>
     <ul class="item-list" data-list="house"></ul>
   </section>
 
@@ -299,16 +319,14 @@
   // This is the public client config (safe to expose), NOT the service
   // account JSON used by the Netlify function.
   // ---------------------------------------------------------------------
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyB1Pq1zJ2wxYDMmdSkPTMM1mBliEnKjWbA",
-  authDomain: "log-this-6d827.firebaseapp.com",
-  projectId: "log-this-6d827",
-  storageBucket: "log-this-6d827.firebasestorage.app",
-  messagingSenderId: "864227515885",
-  appId: "1:864227515885:web:bd1bb20b8b549d24e1dbe4",
-  measurementId: "G-8JZT323375"
-};
+  const firebaseConfig = {
+    apiKey: "REPLACE_ME",
+    authDomain: "REPLACE_ME.firebaseapp.com",
+    projectId: "REPLACE_ME",
+    storageBucket: "REPLACE_ME.appspot.com",
+    messagingSenderId: "REPLACE_ME",
+    appId: "REPLACE_ME"
+  };
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
@@ -344,6 +362,7 @@ const firebaseConfig = {
   // ---------------------------------------------------------------------
   let allDocs = [];
   let restaurantFilter = 'all';
+  let statusFilters = { todo: 'all', grocery: 'all', finance: 'all', house: 'all' };
 
   db.collection('logs').onSnapshot(snap => {
     allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -367,7 +386,10 @@ const firebaseConfig = {
   function renderTodoLike(type) {
     const list = document.querySelector(`ul[data-list="${type}"]`);
     if (!list) return;
-    const items = allDocs.filter(d => d.type === type);
+    const filter = statusFilters[type] || 'all';
+    let items = allDocs.filter(d => d.type === type);
+    if (filter === 'active') items = items.filter(d => !d.done);
+    if (filter === 'done') items = items.filter(d => !!d.done);
     items.sort((a, b) => {
       if (!!a.done !== !!b.done) return a.done ? 1 : -1;
       const ad = a.dueDate || '9999-99-99';
@@ -453,12 +475,27 @@ const firebaseConfig = {
     });
   }
 
-  document.querySelectorAll('.filter-row button').forEach(btn => {
+  // Restaurant All/Went/Want-to-go filter
+  document.querySelector('.panel[data-panel="restaurant"] .filter-row').querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.filter-row button').forEach(b => b.classList.remove('active'));
+      const row = btn.closest('.filter-row');
+      row.querySelectorAll('button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       restaurantFilter = btn.dataset.filter;
       renderRestaurants();
+    });
+  });
+
+  // To-do-style All/Active/Done filters (todo, grocery, finance, house)
+  document.querySelectorAll('.filter-row[data-status-filter]').forEach(row => {
+    const type = row.dataset.statusFilter;
+    row.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        row.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        statusFilters[type] = btn.dataset.filter;
+        renderTodoLike(type);
+      });
     });
   });
 
