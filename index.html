@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Log This</title>
+
+<!-- iOS home-screen app behavior -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Log This">
+<meta name="theme-color" content="#2563eb">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/favicon-32.png">
+<link rel="manifest" href="manifest.json">
+
+<style>
+  :root {
+    --blue: #2563eb;
+    --blue-dark: #1d4ed8;
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --danger: #dc2626;
+    --green: #16a34a;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    min-height: 100vh;
+  }
+
+  /* ---- Splash ---- */
+  #splash {
+    position: fixed; inset: 0; z-index: 999;
+    background: var(--blue);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: white;
+    transition: opacity 0.4s ease;
+  }
+  #splash .mark {
+    width: 88px; height: 88px; border-radius: 22px;
+    background: rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 34px; letter-spacing: -1px;
+    margin-bottom: 16px;
+  }
+  #splash .name { font-size: 20px; font-weight: 600; opacity: 0.95; }
+  #splash.hide { opacity: 0; pointer-events: none; }
+
+  /* ---- Header ---- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--blue);
+    color: white;
+    padding: calc(14px + env(safe-area-inset-top)) 20px 14px;
+    font-size: 20px; font-weight: 700;
+  }
+
+  /* ---- Tabs ---- */
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex;
+    background: var(--card);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav.tabs button {
+    flex: 1; border: none; background: none;
+    padding: 10px 4px 8px; font-size: 11px; font-weight: 600;
+    color: var(--muted); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+  }
+  nav.tabs button .icon { font-size: 20px; line-height: 1; }
+  nav.tabs button.active { color: var(--blue); }
+
+  @media (min-width: 700px) {
+    body { padding-bottom: 24px; }
+    nav.tabs {
+      position: sticky; top: 56px; bottom: auto;
+      flex-direction: row; justify-content: center; gap: 4px;
+      padding: 10px 0;
+    }
+    nav.tabs button {
+      flex: none; flex-direction: row; padding: 8px 18px;
+      border-radius: 999px;
+    }
+    nav.tabs button.active { background: #eef2ff; }
+    main { max-width: 640px; margin: 0 auto; }
+  }
+
+  main { padding: 16px; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ---- Add form ---- */
+  .add-form {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .add-form input[type=text],
+  .add-form input[type=date],
+  .add-form input[type=number],
+  .add-form select,
+  .add-form textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    background: #fafafa;
+  }
+  .add-form textarea { resize: vertical; min-height: 44px; }
+  .add-form .row { display: flex; gap: 8px; }
+  .add-form .row > * { flex: 1; }
+  .add-form button.submit {
+    background: var(--blue); color: white; border: none;
+    padding: 11px; border-radius: 8px; font-size: 15px; font-weight: 600;
+    cursor: pointer;
+  }
+  .add-form button.submit:active { background: var(--blue-dark); }
+
+  /* ---- List items (todo-style) ---- */
+  ul.item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .item .check {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid #c7cbd4; flex: none; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; background: white;
+  }
+  .item.done .check { background: var(--green); border-color: var(--green); color: white; }
+  .item .body { flex: 1; min-width: 0; }
+  .item .title { font-size: 15.5px; font-weight: 600; word-break: break-word; }
+  .item.done .title { text-decoration: line-through; color: var(--muted); }
+  .item .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .badge {
+    font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: #eef2ff; color: var(--blue-dark);
+  }
+  .badge.due { background: #fff7ed; color: #c2410c; }
+  .badge.tag { background: #f1f5f9; color: #475569; }
+  .item .notes { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  .item .del {
+    border: none; background: none; color: #c7cbd4; font-size: 18px;
+    cursor: pointer; padding: 2px 4px; flex: none;
+  }
+  .item .del:active { color: var(--danger); }
+  .empty { text-align: center; color: var(--muted); padding: 32px 12px; font-size: 14px; }
+
+  /* ---- Restaurants ---- */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .filter-row button {
+    flex: 1; padding: 9px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--card); font-size: 13.5px; font-weight: 600; color: var(--muted);
+    cursor: pointer;
+  }
+  .filter-row button.active { background: var(--blue); border-color: var(--blue); color: white; }
+
+  .rest-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 10px;
+  }
+  .rest-card .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .rest-card .name { font-size: 16px; font-weight: 700; }
+  .rest-card .rating { font-size: 14px; font-weight: 700; color: var(--blue-dark); white-space: nowrap; }
+  .rest-card .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .rest-card .notes { font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+  .rest-card .del { float: right; border: none; background: none; color: #c7cbd4; font-size: 17px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="mark">LT</div>
+  <div class="name">Log This</div>
+</div>
+
+<header>Log This</header>
+
+<nav class="tabs">
+  <button data-tab="todo" class="active"><span class="icon">&#9745;</span>To-Do</button>
+  <button data-tab="grocery"><span class="icon">&#128722;</span>Grocery</button>
+  <button data-tab="finance"><span class="icon">&#128176;</span>Finance</button>
+  <button data-tab="house"><span class="icon">&#127968;</span>House</button>
+  <button data-tab="restaurant"><span class="icon">&#127860;</span>Eats</button>
+</nav>
+
+<main>
+
+  <!-- Generic to-do-style panels: todo, grocery, finance, house -->
+  <section class="panel active" data-panel="todo">
+    <form class="add-form" data-add="todo">
+      <input type="text" name="title" placeholder="Add a to-do..." required>
+      <div class="row">
+        <input type="date" name="dueDate">
+        <input type="text" name="notes" placeholder="Notes (optional)">
+      </div>
+      <button type="submit" class="submit">Add</button>
+    </form>
+    <ul class="item-list" data-list="todo"></ul>
+  </section>
+
+  <section class="panel" data-panel="grocery">
+    <form class="add-form" data-add="grocery">
+      <input type="text" name="title" placeholder="Add a grocery item..." required>
+      <div class="row">
+        <input type="text" name="notes" placeholder="Store / notes (optional)">
+      </div>
+      <button type="submit" class="submit">Add</button>
+    </form>
+    <ul class="item-list" data-list="grocery"></ul>
+  </section>
+
+  <section class="panel" data-panel="finance">
+    <form class="add-form" data-add="finance">
+      <input type="text" name="title" placeholder="Add a finance to-do..." required>
+      <div class="row">
+        <input type="date" name="dueDate">
+        <input type="text" name="notes" placeholder="Notes (optional)">
+      </div>
+      <button type="submit" class="submit">Add</button>
+    </form>
+    <ul class="item-list" data-list="finance"></ul>
+  </section>
+
+  <section class="panel" data-panel="house">
+    <form class="add-form" data-add="house">
+      <input type="text" name="title" placeholder="Add a house to-do..." required>
+      <div class="row">
+        <input type="date" name="dueDate">
+        <input type="text" name="notes" placeholder="Notes (optional)">
+      </div>
+      <button type="submit" class="submit">Add</button>
+    </form>
+    <ul class="item-list" data-list="house"></ul>
+  </section>
+
+  <!-- Restaurants: different shape -->
+  <section class="panel" data-panel="restaurant">
+    <form class="add-form" data-add="restaurant">
+      <input type="text" name="title" placeholder="Restaurant name..." required>
+      <div class="row">
+        <input type="text" name="neighborhood" placeholder="Neighborhood (optional)">
+        <select name="status">
+          <option value="want_to_go">Want to go</option>
+          <option value="went">Went</option>
+        </select>
+      </div>
+      <div class="row">
+        <input type="number" name="rating" min="1" max="10" placeholder="Rating (if went)">
+      </div>
+      <textarea name="notes" placeholder="Notes (optional)"></textarea>
+      <button type="submit" class="submit">Add</button>
+    </form>
+
+    <div class="filter-row">
+      <button data-filter="all" class="active">All</button>
+      <button data-filter="want_to_go">Want to go</button>
+      <button data-filter="went">Went</button>
+    </div>
+
+    <div data-list="restaurant"></div>
+  </section>
+
+</main>
+
+<!-- Firebase (client SDK, compat build to match the rest of Justin's apps) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+  // ---------------------------------------------------------------------
+  // FIREBASE CONFIG — replace with your project's Web app config.
+  // Firebase console -> Project settings -> General -> "Your apps" ->
+  // add a Web app if you don't have one yet -> copy the firebaseConfig object.
+  // This is the public client config (safe to expose), NOT the service
+  // account JSON used by the Netlify function.
+  // ---------------------------------------------------------------------
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyB1Pq1zJ2wxYDMmdSkPTMM1mBliEnKjWbA",
+  authDomain: "log-this-6d827.firebaseapp.com",
+  projectId: "log-this-6d827",
+  storageBucket: "log-this-6d827.firebasestorage.app",
+  messagingSenderId: "864227515885",
+  appId: "1:864227515885:web:bd1bb20b8b549d24e1dbe4",
+  measurementId: "G-8JZT323375"
+};
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // ---------------------------------------------------------------------
+  // Splash: hide once Firestore's first snapshot arrives (or after a
+  // short timeout, so it never gets stuck if offline).
+  // ---------------------------------------------------------------------
+  let splashHidden = false;
+  function hideSplash() {
+    if (splashHidden) return;
+    splashHidden = true;
+    document.getElementById('splash').classList.add('hide');
+  }
+  setTimeout(hideSplash, 1500);
+
+  // ---------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------
+  document.querySelectorAll('nav.tabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelector(`.panel[data-panel="${btn.dataset.tab}"]`).classList.add('active');
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Live data: one listener on the whole 'logs' collection, filtered and
+  // rendered per-type client-side (keeps this simple — no composite
+  // Firestore indexes required).
+  // ---------------------------------------------------------------------
+  let allDocs = [];
+  let restaurantFilter = 'all';
+
+  db.collection('logs').onSnapshot(snap => {
+    allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    hideSplash();
+    renderTodoLike('todo');
+    renderTodoLike('grocery');
+    renderTodoLike('finance');
+    renderTodoLike('house');
+    renderRestaurants();
+  }, err => {
+    console.error('Firestore listen failed', err);
+    hideSplash();
+  });
+
+  function tsToMillis(ts) {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    return 0;
+  }
+
+  function renderTodoLike(type) {
+    const list = document.querySelector(`ul[data-list="${type}"]`);
+    if (!list) return;
+    const items = allDocs.filter(d => d.type === type);
+    items.sort((a, b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      const ad = a.dueDate || '9999-99-99';
+      const bd = b.dueDate || '9999-99-99';
+      if (ad !== bd) return ad < bd ? -1 : 1;
+      return tsToMillis(b.createdAt) - tsToMillis(a.createdAt);
+    });
+
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty">Nothing here yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = items.map(item => `
+      <li class="item ${item.done ? 'done' : ''}" data-id="${item.id}">
+        <div class="check" data-toggle="${item.id}" data-done="${!!item.done}">
+          ${item.done ? '&#10003;' : ''}
+        </div>
+        <div class="body">
+          <div class="title">${escapeHtml(item.title || '')}</div>
+          <div class="meta">
+            ${item.dueDate ? `<span class="badge due">Due ${escapeHtml(item.dueDate)}</span>` : ''}
+            ${(item.tags || []).map(t => `<span class="badge tag">${escapeHtml(t)}</span>`).join('')}
+          </div>
+          ${item.notes ? `<div class="notes">${escapeHtml(item.notes)}</div>` : ''}
+        </div>
+        <button class="del" data-del="${item.id}">&#128465;</button>
+      </li>
+    `).join('');
+
+    list.querySelectorAll('[data-toggle]').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.toggle;
+        const done = el.dataset.done === 'true';
+        db.collection('logs').doc(id).update({ done: !done });
+      });
+    });
+    list.querySelectorAll('[data-del]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (confirm('Delete this item?')) {
+          db.collection('logs').doc(el.dataset.del).delete();
+        }
+      });
+    });
+  }
+
+  function renderRestaurants() {
+    const container = document.querySelector('div[data-list="restaurant"]');
+    if (!container) return;
+    let items = allDocs.filter(d => d.type === 'restaurant');
+    if (restaurantFilter !== 'all') {
+      items = items.filter(d => d.status === restaurantFilter);
+    }
+    items.sort((a, b) => tsToMillis(b.createdAt) - tsToMillis(a.createdAt));
+
+    if (items.length === 0) {
+      container.innerHTML = `<div class="empty">No restaurants here yet.</div>`;
+      return;
+    }
+
+    container.innerHTML = items.map(item => `
+      <div class="rest-card">
+        <button class="del" data-del="${item.id}">&#128465;</button>
+        <div class="top">
+          <div class="name">${escapeHtml(item.title || '')}</div>
+          ${item.rating != null ? `<div class="rating">${escapeHtml(String(item.rating))}/10</div>` : ''}
+        </div>
+        <div class="meta">
+          <span class="badge">${item.status === 'went' ? 'Went' : 'Want to go'}</span>
+          ${item.neighborhood ? `<span class="badge tag">${escapeHtml(item.neighborhood)}</span>` : ''}
+          ${(item.tags || []).map(t => `<span class="badge tag">${escapeHtml(t)}</span>`).join('')}
+        </div>
+        ${item.notes ? `<div class="notes">${escapeHtml(item.notes)}</div>` : ''}
+      </div>
+    `).join('');
+
+    container.querySelectorAll('[data-del]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (confirm('Delete this restaurant?')) {
+          db.collection('logs').doc(el.dataset.del).delete();
+        }
+      });
+    });
+  }
+
+  document.querySelectorAll('.filter-row button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-row button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      restaurantFilter = btn.dataset.filter;
+      renderRestaurants();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Add forms
+  // ---------------------------------------------------------------------
+  document.querySelectorAll('form[data-add]').forEach(form => {
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const type = form.dataset.add;
+      const fd = new FormData(form);
+
+      let doc = {
+        type,
+        title: (fd.get('title') || '').trim(),
+        notes: (fd.get('notes') || '').trim() || null,
+        tags: [],
+        transcript: null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+
+      if (type === 'restaurant') {
+        const rating = fd.get('rating');
+        doc.status = fd.get('status') || 'want_to_go';
+        doc.neighborhood = (fd.get('neighborhood') || '').trim() || null;
+        doc.rating = rating ? Number(rating) : null;
+        doc.sentiment = null;
+        doc.done = false;
+        doc.dueDate = null;
+      } else {
+        doc.done = false;
+        doc.dueDate = fd.get('dueDate') || null;
+        doc.status = null;
+        doc.neighborhood = null;
+        doc.rating = null;
+        doc.sentiment = null;
+      }
+
+      if (!doc.title) return;
+
+      db.collection('logs').add(doc).then(() => {
+        form.reset();
+      }).catch(err => {
+        console.error('Add failed', err);
+        alert('Could not save — check your connection and try again.');
+      });
+    });
+  });
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+
+</body>
+</html>

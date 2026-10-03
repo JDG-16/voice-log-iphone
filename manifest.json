@@ -1,0 +1,13 @@
+{
+  "name": "Log This",
+  "short_name": "Log This",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "icons": [
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
